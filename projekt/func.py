@@ -23,7 +23,7 @@ def is_prime(n, k=128):
     while r & 1 == 0:
         s += 1
         r //= 2
-    for _ in range(k):
+    for i in range(k):
         a = randrange(2, n - 1)
         x = pow(a, r, n)
         if x != 1 and x != n - 1:

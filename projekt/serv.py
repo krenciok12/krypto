@@ -1,14 +1,14 @@
 from socketserver import TCPServer, ThreadingMixIn, StreamRequestHandler
 import ssl
 import func
+from random import randint
 
-K=[]
 numberOfPeople = int(input("Ilosc osób: "))
-k = 0
+counter = 0
+questioner = 0
+question = ""
+asked = True
 g,p,q = func.schnoor_group(512)
-print(g)
-print(p)
-print(q)
 Gx = [0] * numberOfPeople
 Res = [0] * numberOfPeople
 
@@ -19,7 +19,7 @@ class MySSL_TCPServer(TCPServer):
                  RequestHandlerClass,
                  certfile,
                  keyfile,
-                 ssl_version=ssl.PROTOCOL_TLSv1,
+                 ssl_version=ssl.PROTOCOL_TLSv1_2,
                  bind_and_activate=True):
         TCPServer.__init__(self, server_address, RequestHandlerClass, bind_and_activate)
         self.certfile = certfile
@@ -33,15 +33,18 @@ class MySSL_TCPServer(TCPServer):
                                  certfile = self.certfile,
                                  keyfile = self.keyfile,
                                  ssl_version = self.ssl_version)
-        K.append(newsocket)
         return connstream, fromaddr
 
 class MySSL_ThreadingTCPServer(ThreadingMixIn, MySSL_TCPServer): pass
 
 class testHandler(StreamRequestHandler):
     def handle(self):
-        global k, numberOfPeople
-        id = k
+        global counter, numberOfPeople, questioner, asked, question
+
+        id = counter
+
+        if counter>=numberOfPeople:
+            return
 
         self.wfile.write(str.encode(str(numberOfPeople),'utf-8'))
         self.wfile.write(str.encode(str(id),'utf-8'))
@@ -50,33 +53,70 @@ class testHandler(StreamRequestHandler):
         self.wfile.write(str.encode(str(q),'utf-8'))
 
         while True:
+
             Gx[id] = int(self.connection.recv(4096))
-            k+=1
-            while k % numberOfPeople !=0:
+
+            #zero knowledge proof
+            for i in range (10):
+                gr = int(self.connection.recv(4096))
+                t = randint(0,1)
+                self.wfile.write(str.encode(str(t),'utf-8'))
+                if t == 0:
+                    r = int(self.connection.recv(4096))
+                    if gr!=pow(g,r,p):
+                        print("BŁĄD")
+                if t == 1:
+                    xr = int(self.connection.recv(4096))
+                    if (Gx[id]*gr) % p !=pow(g,xr,p):
+                        print("BŁĄD")
+
+            counter+=1
+            while counter % numberOfPeople !=0:
                 pass
 
             for i in range(numberOfPeople):
                 if i!=id:
                     self.wfile.write(str.encode(str(Gx[i]),'utf-8'))
 
+            self.wfile.write(str.encode(str(questioner),'utf-8'))
+            if id==questioner:
+                question = str(self.connection.recv(4096))
+                asked = False
+                questioner=(questioner+1) % numberOfPeople
+            else:
+                while asked:
+                    pass
+                self.wfile.write(str.encode(str(question),'utf-8'))
+                asked = True
 
+            gy = int(self.connection.recv(4096))
             Res[id] = int(self.connection.recv(4096))
-            k+=1
-            while k % numberOfPeople !=0:
+
+            for i in range (10):
+                gr = int(self.connection.recv(4096))
+                t = randint(0,1)
+                self.wfile.write(str.encode(str(t),'utf-8'))
+                if t == 0:
+                    r = int(self.connection.recv(4096))
+                    if gr!=pow(gy,r,p):
+                        print("BŁĄD")
+                if t == 1:
+                    xr = int(self.connection.recv(4096))
+                    if (Res[id]*gr) % p !=pow(gy,xr,p):
+                        print("BŁĄD")
+
+            counter+=1
+            while counter % numberOfPeople !=0:
                 pass
 
-            r=1
             for it in Res:
-                r=(r*it) % p
+                self.wfile.write(str.encode(str(it),'utf-8'))
 
-            if r==1:
-                self.wfile.write(str.encode(str(0),'utf-8'))
-            else:
-                self.wfile.write(str.encode(str(1),'utf-8'))
+
 
         #self.wfile.write(b'data')
 
 
 
 
-MySSL_ThreadingTCPServer(('127.0.0.1',5151),testHandler,"cert.pem","key.pem").serve_forever()
+MySSL_ThreadingTCPServer(('127.0.0.1',5151),testHandler,"certificate.pem","Key.pem").serve_forever()
